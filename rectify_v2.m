@@ -4,7 +4,7 @@
 
 % 测区平均航高
 avgHeight = 505984; 
-deltaHeight = 20;
+deltaHeight = 10;
 upHeight = avgHeight + deltaHeight;
 downHeight = avgHeight - deltaHeight;
 
@@ -29,22 +29,16 @@ imageEpi2 = uint8(zeros(1.5*rowsBWD, 1.5*colsBWD));
 
 
 %测试方程系数集
-ParameterAB = zeros(rowsBWD + colsBWD - 1, 2);
+ParameterAB1 = zeros(rowsBWD + colsBWD - 1, 2);
+ParameterAB2 = zeros(rowsFWD + colsFWD - 1, 2);
 
-for m = 1:1:rowsBWD + colsBWD - 1
+
+for m = 1:colsBWD
     
     % ----------步骤1：左片正算计算点1和点2的大地坐标----------
+    Sa = 1;
+    La = m;
     
-    if (m < colsBWD)
-        Sa = 1;
-        La = colsBWD - m + 1;
-    
-    else
-        Sa = m - colsBWD + 1;
-        La = 1;
-    end
-
-
     % 组成点1和点2的SLH量，便于调用RFMreverse函数
     SLH1 = [Sa, La, upHeight];
     SLH2 = [Sa, La, downHeight];
@@ -63,6 +57,8 @@ for m = 1:1:rowsBWD + colsBWD - 1
     SLb = RFMforward(BLH1, RFMcoefficientFWD, regularizationFWD);
     SLc = RFMforward(BLH2, RFMcoefficientFWD, regularizationFWD);
     
+    Sb = SLb(1);
+    Sc = SLc(1);
     Lb = SLb(2);
     Lc = SLc(2);
 
@@ -80,8 +76,6 @@ for m = 1:1:rowsBWD + colsBWD - 1
 
     Sd = SLd(1);
     Ld = SLd(2);
-    Sb = SLb(1);
-    Sc = SLc(1);
 
     % ----------步骤5：计算直线方程----------
 
@@ -94,16 +88,18 @@ for m = 1:1:rowsBWD + colsBWD - 1
     end
     B2 = Sb - A2 * Lb;
     
-    ParameterAB(m, 1) = A1;
-    ParameterAB(m, 2) = B1;
-    
-    deltaX = 1 / sqrt(1 + A1 * A1);
+    ParameterAB1(m, 1) = A1;
+    ParameterAB1(m, 2) = B1;
+    ParameterAB2(m, 1) = A2;
+    ParameterAB2(m, 2) = B2;
+ 
+    deltaBY = 1 / sqrt(1 + (A1 * A1));
     
     % 每行
-    index = 1;
-    for stepX = 1:deltaX:colsBWD - 1
-        stepY = -(A1 * stepX + B1);
-        if (stepY > rowsBWD - 1 || floor(stepY) <= 0 || floor(stepX) <=0)
+    indexBWD = 1;
+    for stepY = 1:deltaBY:rowsBWD - 1
+        stepX = A1*stepY - B1;
+        if (stepX > colsBWD - 1 || floor(stepY) <= 0 || floor(stepX) <=0)
            continue 
         end
         fuckX = stepX - floor(stepX);
@@ -113,11 +109,31 @@ for m = 1:1:rowsBWD + colsBWD - 1
         fuckX*(1 - fuckY)*littleImageBWD(floor(stepY) + 1, floor(stepX)) + ...
         fuckX*fuckY*littleImageBWD(floor(stepY) + 1, floor(stepX) + 1);
         
-        imageEpi1(m, index) = value;
+        imageEpi1(m, indexBWD) = value;
         
-        index = index + 1;
+        indexBWD = indexBWD + 1;     
+    end
     
+    
+    deltaFY = 1 / sqrt(1 + (A2 * A2));
+    
+    indexFWD = 1;
+    for stepY = 1:deltaFY:rowsFWD - 1
+        stepX = A2 * stepY + B2;
+        if (stepX > colsFWD - 1 || floor(stepY) <= 0 || floor(stepX) <=0)
+           continue 
+        end
+        fuckX = stepX - floor(stepX);
+        fuckY = stepY - floor(stepY);
+        value = (1 - fuckX)*(1- fuckY)*littleImageFWD(floor(stepY), floor(stepX)) +...
+        (1 - fuckX)*fuckY*littleImageFWD(floor(stepY), floor(stepX)+1) + ...
+        fuckX*(1 - fuckY)*littleImageFWD(floor(stepY) + 1, floor(stepX)) + ...
+        fuckX*fuckY*littleImageFWD(floor(stepY) + 1, floor(stepX) + 1);
         
+        imageEpi2(m, indexFWD) = value;
+        
+        indexFWD = indexFWD + 1;
+           
     end
     
 end
